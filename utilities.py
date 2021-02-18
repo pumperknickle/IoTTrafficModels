@@ -162,6 +162,135 @@ def token_frequency_features_and_labels(range_tokens, ranges_to_tokens, real=Tru
         counter += 1
     return features, class_labels, counter, device_ids, max_sequence_length, devices
 
+def stringToDurationSignature(item):
+    item.replace(" ", "")
+    arr = item.split(',')
+    float_arr = [float(numeric_string) for numeric_string in arr]
+    sig = []
+    for i in range(0, len(float_arr), 2):
+        sig.append((float_arr[i], float_arr[i + 1]))
+    return sig
+
+def spanSize(r):
+    return r[1] - r[0]
+
+def sortRanges(rangesToTokens):
+    return sorted(rangesToTokens.items(), key=lambda x: spanSize(stringToDurationSignature(x[0])[0]))
+
+def convertalldurations(all_durations, rangesToTokens):
+    all_tokens = []
+    all_tokens_to_durations = dict()
+    sortedRanges = sortRanges(rangesToTokens)
+    for durations in all_durations:
+        tokens, tokensToDurations = convertdurations(durations, sortedRanges)
+        for key, value in tokensToDurations.items():
+            all_tokens_to_durations[key] = all_tokens_to_durations.get(key, []) + value
+        all_tokens += tokens
+    return all_tokens, all_tokens_to_durations
+
+def convertalldurationstoint(all_durations, rangesToTokens):
+    all_tokens = []
+    all_tokens_to_durations = dict()
+    sortedRanges = sortRanges(rangesToTokens)
+    for durations in all_durations:
+        tokens, tokensToDurations = convertdurationsToInt(durations, sortedRanges)
+        for key, value in tokensToDurations.items():
+            all_tokens_to_durations[key] = all_tokens_to_durations.get(key, []) + value
+        all_tokens.append(tokens)
+    return all_tokens, all_tokens_to_durations
+
+def convertdurationsToInt(durations, sortedRanges):
+    tokens = []
+    tokensToDurations = dict()
+    for duration in durations:
+        for key, value in sortedRanges:
+            signature = stringToDurationSignature(key)[0]
+            if duration >= signature[0] and duration <= signature[1]:
+                tokens.append(value)
+                tokensToDurations[value] = tokensToDurations.get(value, []) + [duration]
+                break
+    return tokens, tokensToDurations
+
+def convertdurations(durations, sortedRanges):
+    tokens = []
+    tokensToDurations = dict()
+    for duration in durations:
+        for key, value in sortedRanges:
+            signature = stringToDurationSignature(key)[0]
+            if duration >= signature[0] and duration <= signature[1]:
+                feat = [0] * len(sortedRanges)
+                feat[value] = 1
+                tokens.append(feat)
+                tokensToDurations[value] = tokensToDurations.get(value, []) + [duration]
+                break
+    return tokens, tokensToDurations
+
+def convertallgroups(all_durations, rangesToTokens):
+    merged = dict()
+    sortedRanges = sortRanges(rangesToTokens)
+    for durations in all_durations:
+        merged = mergeall(merged, groupdurations(durations, sortedRanges))
+    return merged
+
+def convertallgroups(all_durations, rangesToTokens):
+    merged = dict()
+    sortedRanges = sortRanges(rangesToTokens)
+    for durations in all_durations:
+        merged = mergeall(merged, groupdurations(durations, sortedRanges))
+    return merged
+
+def mergeall(first, second):
+    for secondKey in second.keys():
+        first[secondKey] = first.get(secondKey, []) + second[secondKey]
+    return first
+
+
+def groupdurations(durations, sortedRanges):
+    groups = dict()
+    for duration in durations:
+        for key, value in sortedRanges:
+            signature = stringToDurationSignature(key)[0]
+            if duration >= signature[0] and duration <= signature[1]:
+                groups[key] = groups.get(key, []) + [duration]
+    return groups
+
+def durationcluster(x, n_clusters=20):
+    x = [i for i in x if i != 0]
+    newX = np.array(x)
+    newX = np.log(newX)
+    newX = np.expand_dims(newX, axis=1)
+    clusters = dict()
+    db = KMeans(n_clusters=n_clusters, random_state=1021).fit(newX)
+    for i in range(len(db.labels_)):
+        clusters[db.labels_[i]] = clusters.get(db.labels_[i], []) + [x[i]]
+    return list(clusters.values())
+
+def toDurationRanges(clusters):
+    rangesToTokens = dict()
+    tokensToRanges = dict()
+    tokensToMean = dict()
+    tokensTostd = dict()
+    zeroRange = signatureToString([(0, 0)])
+    rangesToTokens[zeroRange] = 0
+    tokensToRanges[0] = zeroRange
+    tokensToMean[0] = 0
+    tokensTostd[0] = 0
+    for i in range(len(clusters)):
+        cluster = clusters[i]
+        clusMin = min(cluster)
+        clusMax = max(cluster)
+        mean = statistics.mean(cluster)
+        if len(cluster) > 1:
+            std = statistics.stdev(cluster)
+        else:
+            std = 0
+        rangeString = signatureToString([(clusMin, clusMax)])
+        rangesToTokens[rangeString] = i + 1
+        tokensToRanges[i + 1] = rangeString
+        tokensToMean[i + 1] = mean
+        tokensTostd[i + 1] = std
+    return rangesToTokens, tokensToRanges, tokensToMean, tokensTostd
+
 def extract_packet_sizes(sequences):
     all_packet_sizes = []
     for sequence in sequences:
