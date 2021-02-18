@@ -15,7 +15,7 @@ def sequence_features(range_tokens):
         for sequence in value:
             resulting_sequence = []
             for element in sequence:
-                resulting_sequence.append(element + 1)
+                resulting_sequence.append(element)
             features.append(resulting_sequence)
     return features
 
@@ -130,7 +130,7 @@ def signature_frequencies_features(signature_frequencies, real=True):
 
 # range_tokens is a dictionary of key device name mapped to 2d array (samples of packet size sequences)
 def token_frequency_features_and_labels(range_tokens, ranges_to_tokens, real=True):
-    counter = 1
+    counter = 0
     features = []
     class_labels = []
     total_tokens = len(ranges_to_tokens)
@@ -138,6 +138,7 @@ def token_frequency_features_and_labels(range_tokens, ranges_to_tokens, real=Tru
     print("building features")
     max_sequence_length = 0
     devices = []
+    total_devices = len(ranges_to_tokens.items())
     for key, value in tqdm(range_tokens.items()):
         has_data = False
         for sequence in value:
@@ -154,7 +155,7 @@ def token_frequency_features_and_labels(range_tokens, ranges_to_tokens, real=Tru
                 class_labels.append(counter)
                 has_data = True
             else:
-                class_labels.append(0)
+                class_labels.append(total_devices)
                 has_data = True
         if has_data:
             devices.append(key)
@@ -301,13 +302,13 @@ def extract_packet_sizes(sequences):
         all_packet_sizes.append(packet_sizes)
     return all_packet_sizes
 
-def extract_durations(sequences):
+def extract_durations(sequences, max_duration = 1.0):
     all_durations = []
     for sequence in sequences:
         durations = []
         for feature in sequence:
             duration = feature[1]
-            durations.append(duration)
+            durations.append(duration/max_duration)
         all_durations.append(durations)
     return all_durations
 

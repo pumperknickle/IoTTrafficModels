@@ -47,7 +47,7 @@ X_train, X_test, tr_train, tr_test, class_train, class_test = train_test_split(n
 
 rangeTokens, rangesToTokens, tokensToRanges, max_packet_size = extract_packet_size_ranges(device_to_packet_sizes)
 for key, item in rangeTokens.items():
-    dir = "key" + "/"
+    dir = key + "/" + "real" + "/"
     pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
     filename = dir + 'real_data.txt'
     with open(filename, mode='a') as csvfile:
@@ -55,15 +55,15 @@ for key, item in rangeTokens.items():
         for seq in device_to_packet_sizes[key]:
             csv_writer.writerow(seq)
 
+for key, item in device_to_durations.items():
+    dir = key + "/" + "real" + "/"
+    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+    filename = dir + 'real_durations.txt'
+    with open(filename, mode='wb') as durationFile:
+        pickle.dump(item, durationFile)
 
 
 
-
-# sequence_feats = sequence_features(rangeTokens)
-# total_tokens = len(tokensToRanges)
-# features, class_labels, total_classes, device_ids, max_sequence_length, devices = token_frequency_features_and_labels(rangeTokens, rangesToTokens)
-# sequence_feats = sequence.pad_sequences(np.array(sequence_feats), maxlen=max_sequence_length)
-# X_train, X_test, tr_train, tr_test, seq_train, seq_test, class_train, class_test = train_test_split(np.array(features), np.array(traffic_rate_feats), sequence_feats, np.array(class_labels), stratify=np.array(class_labels))
 
 def signature_frequency_discriminator(sigNumber=numberOfSigs, n_classes=total_classes):
     in_frequencies = Input(shape=(sigNumber,))

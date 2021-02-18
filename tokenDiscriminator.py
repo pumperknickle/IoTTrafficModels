@@ -18,7 +18,7 @@ from sklearn.metrics import confusion_matrix
 import seaborn as sn
 import pandas as pd
 import matplotlib.pyplot as plt
-
+from gan.output import Output, OutputType, Normalization
 
 warnings.filterwarnings('ignore')
 
@@ -35,10 +35,13 @@ traffic_rate_feats = []
 devices = []
 print(features)
 features = splitAllFeatures(features)
+device_to_durations = dict()
+all_durations = []
 
 for key, value in features.items():
     device_to_packet_sizes[key] = extract_packet_sizes(value)
     traffic_rate_feats += generate_traffic_rate_features(value)
+    all_durations.append(device_to_durations[key])
 
 rangeTokens, rangesToTokens, tokensToRanges, max_packet_size = extract_packet_size_ranges(device_to_packet_sizes)
 sequence_feats = sequence_features(rangeTokens)
@@ -46,6 +49,76 @@ total_tokens = len(tokensToRanges)
 features, class_labels, total_classes, device_ids, max_sequence_length, devices = token_frequency_features_and_labels(rangeTokens, rangesToTokens)
 sequence_feats = sequence.pad_sequences(np.array(sequence_feats), maxlen=max_sequence_length)
 X_train, X_test, tr_train, tr_test, seq_train, seq_test, class_train, class_test = train_test_split(np.array(features), np.array(traffic_rate_feats), sequence_feats, np.array(class_labels), stratify=np.array(class_labels))
+max_duration = np.max(np.array(all_durations).flatten())
+
+for key, value in features.items():
+    device_to_durations[key] = extract_durations(value, max_duration=max_duration)
+
+for key, item in rangeTokens.items():
+    dir = key + "/" + "real" + "/"
+    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+    filename = dir + 'real_data.txt'
+    with open(filename, mode='a') as csvfile:
+        csv_writer = csv.writer(csvfile, delimiter=' ')
+        for seq in device_to_packet_sizes[key]:
+            csv_writer.writerow(seq)
+
+for key, item in device_to_durations.items():
+    dir = key + "/" + "real" + "/"
+    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+    filename = dir + 'real_durations.txt'
+    with open(filename, mode='wb') as durationFile:
+        pickle.dump(item, durationFile)
+
+with open("deviceToIds.pkl", mode="wb") as tokenFile:
+    pickle.dump(device_ids, tokenFile)
+
+with open("tokensToRanges.pkl", mode="wb") as tokenFile:
+    pickle.dump(tokensToRanges, tokenFile)
+
+with open("max_duration.pkl", mode="wb") as tokenFile:
+    pickle.dump(max_duration, tokenFile)
+
+V = (max_packet_size * 2) + 1
+
+data_feature_output = [
+    Output(type_=OutputType.discrete, dim=V, normalization=Nne, is_gen_flag=False),
+    Output(type_=OutputType.continuous, dim=1, normalization=Normalization.ZERO_ONE, is_gen_flag=False)
+]
+
+data_attribute_output = [
+    Output(type_=OutputType.discrete, dim=len(devices), normalization=None, is_gen_flag=False)
+]
+
+data_feature = []
+data_attribute = []
+data_gen_flag = []
+
+total_devices = len(devices)
+
+device_number = 0
+for key, packet_sizes in device_to_packet_sizes.items():
+    normalized_durations = device_to_durations[key]
+    data_gen = []
+    data_feat = []
+    data_attr = [0] * total_devices
+    data_attr[device_number] = 1.0
+    for j in range(len(packet_sizes)):
+        packet_size = packet_sizes[j]
+        normalized_duration = normalized_durations[j]
+        data_gen.append(1.0)
+        d = V * [0.0]
+        d[packet_size] = 1.0
+        d.append(normalized_duration)
+    data_gen_flag.append(np.array(data_gen, dtype="float32"))
+    data_feature.append(np.array(data_feat))
+    data_attribute.append(np.array(data_attr, dtype="float32"))
+    
+np.savez("data/iot/data_train.npz", data_feature=data_feature, data_attribute=data_attribute, data_gen_flag=data_gen_flag)
+with open('data/iot/data_feature_output.pkl', mode='wb') as fp:
+    pickle.dump(data_feature_output, fp, protocol=2)
+with open('data/iot/data_attribute_output.pkl', mode='wb') as fp:
+    pickle.dump(data_attribute_output, fp, protocol=2)
 
 def signature_frequency_discriminator(tokenCount=total_tokens, n_classes=total_classes, max_length=max_sequence_length):
     in_frequencies = Input(shape=(tokenCount,))
