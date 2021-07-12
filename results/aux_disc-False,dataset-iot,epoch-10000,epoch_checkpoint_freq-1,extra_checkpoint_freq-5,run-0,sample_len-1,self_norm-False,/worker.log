@@ -1,0 +1,14 @@
+2021-02-28 20:29:16.118999: I tensorflow/stream_executor/platform/default/dso_loader.cc:48] Successfully opened dynamic library libcudart.so.10.1
+(5997, 20, 11)
+(5997, 18)
+(5997, 20)
+(5997, 20, 13)
+3
+Traceback (most recent call last):
+  File "/home/joseph/.local/bin/start_gpu_task", line 11, in <module>
+    load_entry_point('GPUTaskScheduler', 'console_scripts', 'start_gpu_task')()
+  File "/home/joseph/DoppelGANger/GPUTaskScheduler/gpu_task_scheduler/start_gpu_task.py", line 23, in main
+    worker.main()
+  File "/home/joseph/IoTTrafficModels/example_training/gan_task.py", line 84, in main
+    run_config = tf.ConfigProto()
+AttributeError: module 'tensorflow' has no attribute 'ConfigProto'

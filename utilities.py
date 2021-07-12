@@ -19,6 +19,16 @@ def sequence_features(range_tokens):
             features.append(resulting_sequence)
     return features
 
+def packet_size_features(packet_sizes, max_packet_size):
+    features = []
+    for key, value in tqdm(packet_sizes.items()):
+        for sequence in value:
+            resulting_sequence = []
+            for element in sequence:
+                resulting_sequence.append(element + max_packet_size)
+            features.append(resulting_sequence)
+    return features
+
 def durationsToTimestamp(all_durations, max_duration=1.0):
     all_timestamps = []
     for durations in all_durations:
@@ -85,28 +95,32 @@ def splitAllFeatures(all_features, n=20):
             features_to_return[key] = all_features
     return features_to_return
 
-def generate_traffic_rate_features(tuples, firstInterval = 1.0, secondIntervals = [0.1]):
+# find total traffic output through secondInterval, compute mean/std on firstInterval, create a feature vector with mean of each previous mean and std
+def generate_traffic_rate_features(tuples, firstInterval = 10.0, secondIntervals = [0.1]):
     features = []
     for sequence in tuples:
         intervals = group(firstInterval, sequence)
         means = []
         stds = []
+        fv = []
         for j, k in intervals:
             keyStream = k
             for secondInterval in secondIntervals:
                 sub_groups = group_then_convert(secondInterval, keyStream)
                 sub_group = []
                 for k, v in sub_groups:
-                    float_v = [float(x) for x in v]
+                    float_v = [abs(float(x)) for x in v]
                     sub_group.append(sum(float_v))
-                sub_group = sub_group + ([0] * (int(1/(secondInterval)) - len(sub_group)))
+                sub_group = sub_group + ([0] * (int((firstInterval)/(secondInterval)) - len(sub_group)))
                 means.append(mean(sub_group))
                 stds.append(statistics.stdev(sub_group))
-        if len(stds) < 2:
-            featureVector = [mean(means), mean(stds), 0, 0]
-        else:
-            featureVector = [mean(means), mean(stds), statistics.stdev(means), statistics.stdev(stds)]
-        features.append(featureVector)
+                fv.append([mean(sub_group), statistics.stdev(sub_group)])
+        # featureVector = [mean(means), mean(stds)]
+        # if len(stds) < 2:
+        #     featureVector = [mean(means), mean(stds), 0, 0]
+        # else:
+        #     featureVector = [mean(means), mean(stds), statistics.stdev(means), statistics.stdev(stds)]
+        features.append(fv)
     return features
 
 def signature_frequencies_features(signature_frequencies, real=True):
@@ -290,7 +304,7 @@ def toDurationRanges(clusters):
         tokensToRanges[i + 1] = rangeString
         tokensToMean[i + 1] = mean
         tokensTostd[i + 1] = std
-    return rangesToTokens, tokensToRanges, tokensToMean, tokensTostd
+    return rangesToTokens, tokensToRanges
 
 def extract_packet_sizes(sequences):
     all_packet_sizes = []
@@ -307,7 +321,7 @@ def extract_durations(sequences, max_duration = 1.0):
     for sequence in sequences:
         durations = []
         for feature in sequence:
-            duration = feature[1]
+            duration = float(feature[1])
             durations.append(duration/max_duration)
         all_durations.append(durations)
     return all_durations
@@ -319,6 +333,13 @@ def extract_dictionaries_from_activities(converted):
     signatureToToken = {k: v for v, k in enumerate(list(sigset))}
     tokenToSignature = {v: k for k, v in signatureToToken.items()}
     return signatureToToken, tokenToSignature
+
+def multiply_durations(durations, max_duration):
+    num_seqs = []
+    for sequence in durations:
+        num_seq = [float(x) * max_duration for x in sequence]
+        num_seqs.append(num_seq)
+    return num_seqs
 
 def normalize_durations(sequences):
     max_d = 0.0
@@ -336,7 +357,7 @@ def normalize_durations(sequences):
 def normalize_packet_sizes(sequences, max_packet_size):
     normalized_packets = []
     for num_seq in sequences:
-        normalized = [(x + max_packet_size) for x in num_seq]
+        normalized = [(int(x) + max_packet_size) for x in num_seq]
         normalized_packets.append(normalized)
     return normalized_packets, (max_packet_size * 2) + 1
 
@@ -346,6 +367,20 @@ def get_max_packet_size(sequences):
         num_seq = [int(x) for x in sequence]
         max_packet_size = max(max([abs(x) for x in num_seq]), max_packet_size)
     return max_packet_size
+
+def get_max_duration(sequences):
+    max_duration = 0
+    for sequence in sequences:
+        num_seq = [float(x) for x in sequence]
+        max_duration = max(max([abs(x) for x in num_seq]), max_duration)
+    return max_duration
+
+def get_min_duration(sequences):
+    min_duration = 1000.0
+    for sequence in sequences:
+        num_seq = [float(x) for x in sequence]
+        min_duration = min(min([abs(x) for x in num_seq]), min_duration)
+    return min_duration
 
 def signatureToString(signature):
     signature_ints = []
@@ -663,7 +698,8 @@ def extract_packet_size_ranges(packet_sizes, min_sig_size=2, max_sig_size=5, dis
     all_sequences = []
     print("Normalizing Packet Sizes")
     for key, value in tqdm(packet_sizes.items()):
-        all_sequences += normalize_packet_sizes(value, max_packet_size)[0]
+        if not key.startswith('fake'):
+            all_sequences += normalize_packet_sizes(value, max_packet_size)[0]
     all_signatures = signatureExtractionAll(all_sequences, min_sig_size, max_sig_size, distance_threshold, cluster_threshold)
     sorted_sigs = get_activity_order(all_sequences, all_signatures)
     range_mapping = map_all_signatures(all_signatures)
