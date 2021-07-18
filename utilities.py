@@ -576,6 +576,109 @@ def extractSignatures(clusters, n):
 def most_common(lst):
     return max(set(lst), key=lst.count)
 
+# def moniotr_directory_feature_extraction(pathToDirectory):
+#     pcapPath = pathToDirectory + '/*.pcap'
+#     pcapFiles = glob.glob(pcapPath)
+#     for file in pcapFiles:
+
+def packet_protocol_feature_extraction(pathToFile):
+    print(pathToFile)
+    pcaps = pyshark.FileCapture(pathToFile)
+    pcaps.set_debug()
+    features = []
+    for pcap in pcaps:
+        featureV = []
+        if 'IP' in pcap and 'TCP' in pcap:
+            if 'TLS' not in pcap:
+                featureV.append("0")
+                featureV.append(float(pcap.frame_info.time_epoch))
+                featureV.append(pcap.length)
+                if int(pcap.tcp.srcport) > int(pcap.tcp.dstport):
+                    featureV.append(int(pcap.tcp.dstport))
+                    featureV.append(1)
+                else:
+                    featureV.append(int(pcap.tcp.srcport))
+                    featureV.append(0)
+                featureV.append(pcap.ip.src)
+                featureV.append(pcap.ip.dst)
+            else:
+                try:
+                    tlsPCAP = getattr(pcap.tls, 'tls.record.content_type')
+                    if tlsPCAP == 23:
+                        featureV.append(float(pcap.frame_info.time_epoch))
+                        featureV.append(pcap.length)
+                        if int(pcap.tcp.srcport) > int(pcap.tcp.dstport):
+                            featureV.append(int(pcap.tcp.dstport))
+                            featureV.append(1)
+                        else:
+                            featureV.append(int(pcap.tcp.srcport))
+                            featureV.append(0)
+                        featureV.append("0")
+                        featureV.append(pcap.ip.src)
+                        featureV.append(pcap.ip.dst)
+                except:
+                    pass
+        else:
+            features_strings = ""
+            protocols = ["ARP", "LLC", "IP", "ICMP", "ICMPv6", "EAPOL", "TCP", "UDP", "HTTP", "HTTPS", "DHCP", "BOOTP",
+                         "SSDP", "DNS", "MDNS", "NTP"]
+            for protocol in protocols:
+                if protocol in pcap:
+                    features_strings += "1"
+                else:
+                    features_strings += "0"
+            featureV.append(features_strings)
+            featureV.append(float(pcap.frame_info.time_epoch))
+            featureV.append(pcap.length)
+            if hasattr(pcap, 'udp'):
+                if int(pcap.udp.srcport) > int(pcap.udp.dstport):
+                    featureV.append(int(pcap.udp.dstport))
+                    featureV.append(1)
+                else:
+                    featureV.append(int(pcap.udp.srcport))
+                    featureV.append(0)
+            else:
+                featureV.append(0)
+                featureV.append(-1)
+            featureV += features_strings
+            if 'IP' in pcap:
+                featureV.append(pcap.ip.src)
+                featureV.append(pcap.ip.dst)
+        features.append(featureV)
+    pcaps.close()
+    if len(features) == 0:
+        return []
+    featureSources = list(filter(lambda x: len(x) > 5, features))
+    destinationSources = list(filter(lambda x: len(x) > 6, features))
+    sources = [row[5] for row in featureSources]
+    destinations = [row[6] for row in destinationSources]
+    most_common_ip = most_common(sources + destinations)
+    final_features = []
+    features.sort(key=lambda x: x[0])
+    for i in range(len(features)):
+        row = features[i]
+        featureV = []
+        duration = 0
+        if i < len(features) - 1:
+            nextRow = features[i + 1]
+            duration = nextRow[1] - row[1]
+        if len(row) < 6:
+            featureV.append(int(row[2]))
+        if row[5] == most_common_ip:
+            featureV.append(int(row[2]))
+        else:
+            if row[6] == most_common_ip:
+                featureV.append(int(row[2]) * -1)
+            else:
+                continue
+        featureV.append(duration)
+        featureV.append(row[0])
+        featureV.append(row[3])
+        featureV.append(row[4])
+        final_features.append(featureV)
+    print(final_features)
+    return final_features
+
 def packet_feature_extraction(pathToFile):
     pcaps = pyshark.FileCapture(pathToFile)
     features = []
